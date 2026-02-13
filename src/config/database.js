@@ -3,6 +3,7 @@ import Configuration from '../models/Configuration.js';
 import Instructor from '../models/Instructor.js';
 import ClassType from '../models/ClassType.js';
 import Student from '../models/Student.js';
+import { classTypeSeedData, configurationSeedData, instructorSeedData, studentSeedData } from '../utils/seedData.js';
 
 const connectDatabase = async () => {
   try {
@@ -26,59 +27,30 @@ const initializeConfigurations = async () => {
   try {
     const existingConfigurationsCount = await Configuration.countDocuments();
 
+    // Load configuration from seed data
     if (existingConfigurationsCount === 0) {
-      const defaultConfigurations = Configuration.getDefaults();
-      await Configuration.insertMany(defaultConfigurations);
+      await Configuration.insertMany(configurationSeedData);
       console.log('✓ Default configurations initialized');
     }
 
-    // I also want to add the default instructors and class types if they don't exist
+    // Load instructor from seed data
     const existingInstructorsCount = await Instructor.countDocuments();
     if (existingInstructorsCount === 0) {
-      // Generating 50 default instructors with random names and instructor IDs starting from 1 to 50
-      const defaultInstructors = [];
-      for (let i = 1; i <= 50; i++) {
-        defaultInstructors.push({
-          instructorId: `${i}`,
-          name: `Instructor ${i}`,
-          active: true
-        });
-      };
-
-      await Instructor.insertMany(defaultInstructors);
-
+      await Instructor.insertMany(instructorSeedData);
       console.log('✓ Default instructors initialized');
     }
 
+    // Load classType from seeed data
     const existingClassTypesCount = await ClassType.countDocuments();
     if (existingClassTypesCount === 0) {
-      // Generating 50 default class types with random names and class type IDs starting from 1 to 50
-      const defaultClassTypes = [];
-      for (let i = 1; i <= 50; i++) {
-        defaultClassTypes.push({
-          classTypeId: `${i}`,
-          name: `Class Type ${i}`,
-          active: true
-        });
-      };
-
-      await ClassType.insertMany(defaultClassTypes);
+      await ClassType.insertMany(classTypeSeedData);
       console.log('✓ Default class types initialized');
     }
 
-    // Add student IDs as well starting from 1 to 50
+    // Load student from seed data
     const existingStudentsCount = await Student.countDocuments();
     if (existingStudentsCount === 0) {
-      // Generating 50 default students with random names and student IDs starting from 1 to 50
-      const defaultStudents = [];
-      for (let i = 1; i <= 50; i++) {
-        defaultStudents.push({
-          studentId: `${i}`,
-          name: `Student ${i}`,
-          active: true
-        });
-      };
-      await Student.insertMany(defaultStudents);
+      await Student.insertMany(studentSeedData);
       console.log('✓ Default students initialized');
     }
   } catch (error) {

@@ -20,25 +20,6 @@ export const getAllConfigurations = async (req, res, next) => {
   }
 };
 
-// Get single configuration
-export const getConfiguration = async (req, res, next) => {
-  try {
-    const { key } = req.params;
-
-    const config = await Configuration.findOne({ key });
-    if (!config) {
-      throw new NotFoundError(`Configuration with key '${key}' not found`);
-    }
-
-    res.json({
-      success: true,
-      data: config
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 // Update configuration
 export const updateConfiguration = async (req, res, next) => {
   try {
