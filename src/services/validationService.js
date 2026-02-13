@@ -1,0 +1,341 @@
+import ScheduledClass from '../models/ScheduledClass.js';
+import Student from '../models/Student.js';
+import Instructor from '../models/Instructor.js';
+import ClassType from '../models/ClassType.js';
+import { hasTimeOverlap, getDayBoundaries } from '../utils/timeOverlap.js';
+import { getConfigurationCache } from '../controllers/configController.js';
+
+/**
+ * Check if instructor exists and is active
+ * @param {string} instructorId - Instructor ID to validate
+ * @returns {Promise<Object>} - Validation result
+ */
+export const validateInstructorExists = async (instructorId) => {
+  const instructor = await Instructor.findOne({ instructorId, active: true });
+
+  if (!instructor) {
+    return {
+      valid: false,
+      error: `Invalid instructor ID: ${instructorId}`
+    };
+  }
+
+  return { valid: true, instructor };
+};
+
+/**
+ * Check if class type exists and is active
+ * @param {string} classTypeId - Class type ID to validate
+ * @returns {Promise<Object>} - Validation result
+ */
+export const validateClassTypeExists = async (classTypeId) => {
+  const classType = await ClassType.findOne({ classTypeId, active: true });
+
+  if (!classType) {
+    return {
+      valid: false,
+      error: `Invalid class type ID: ${classTypeId}`
+    };
+  }
+
+  return { valid: true, classType };
+};
+
+/**
+ * Check if student exists and is active, or auto-add if enabled
+ * @param {string} studentId - Student ID to validate
+ * @param {boolean} autoAdd - Whether to auto-add if not found
+ * @returns {Promise<Object>} - Validation result
+ */
+export const validateOrCreateStudent = async (studentId, autoAdd = false) => {
+  let student = await Student.findOne({ studentId, active: true });
+
+  if (!student && autoAdd) {
+    // Auto-add student
+    student = await Student.create({
+      studentId,
+      name: '',
+      email: '',
+      active: true,
+      metadata: {
+        autoAdded: true
+      }
+    });
+
+    return { valid: true, student, autoAdded: true };
+  }
+
+  if (!student) {
+    return {
+      valid: false,
+      error: `Invalid student ID: ${studentId}`
+    };
+  }
+
+  return { valid: true, student, autoAdded: false };
+};
+
+/**
+ * Check for schedule conflicts (overlapping classes)
+ * @param {Object} classData - Class data to check
+ * @param {string} excludeRegistrationId - Registration ID to exclude from check (for updates)
+ * @returns {Promise<Object>} - Validation result
+ */
+export const checkScheduleConflicts = async (classData, excludeRegistrationId = null) => {
+  const { instructorId, studentId, startTime, endTime, date } = classData;
+
+  const { dayStart, dayEnd } = getDayBoundaries(date || startTime);
+
+  // Build query to find potential conflicts
+  const query = {
+    'schedule.date': { $gte: dayStart, $lte: dayEnd },
+    status: 'scheduled',
+    $or: [
+      { instructorId },
+      { studentIds: studentId }
+    ]
+  };
+
+  // Exclude current class if updating
+  if (excludeRegistrationId) {
+    query.registrationId = { $ne: excludeRegistrationId };
+  }
+
+  const potentialConflicts = await ScheduledClass.find(query);
+
+  // Check each potential conflict for actual time overlap
+  const conflicts = [];
+
+  for (const existingClass of potentialConflicts) {
+    const overlaps = hasTimeOverlap(
+      startTime,
+      endTime,
+      existingClass.schedule.startTime,
+      existingClass.schedule.endTime
+    );
+
+    if (overlaps) {
+      const conflictType = existingClass.instructorId === instructorId
+        ? 'instructor'
+        : 'student';
+
+      conflicts.push({
+        type: conflictType,
+        registrationId: existingClass.registrationId,
+        startTime: existingClass.schedule.startTime,
+        endTime: existingClass.schedule.endTime,
+        message: `${conflictType === 'instructor' ? 'Instructor' : 'Student'} has conflicting class at ${existingClass.schedule.startTime.toLocaleString()}`
+      });
+    }
+  }
+
+  if (conflicts.length > 0) {
+    return {
+      valid: false,
+      conflicts,
+      error: `Schedule conflict: ${conflicts[0].message}`
+    };
+  }
+
+  return { valid: true, conflicts: [] };
+};
+
+/**
+ * Check instructor daily class limit
+ * @param {string} instructorId - Instructor ID
+ * @param {Date} date - Date to check
+ * @param {number} maxClasses - Maximum allowed classes
+ * @param {string} excludeRegistrationId - Registration ID to exclude (for updates)
+ * @returns {Promise<Object>} - Validation result
+ */
+export const checkInstructorDailyLimit = async (instructorId, date, maxClasses, excludeRegistrationId = null) => {
+  const { dayStart, dayEnd } = getDayBoundaries(date);
+
+  const query = {
+    instructorId,
+    'schedule.date': { $gte: dayStart, $lte: dayEnd },
+    status: 'scheduled'
+  };
+
+  if (excludeRegistrationId) {
+    query.registrationId = { $ne: excludeRegistrationId };
+  }
+
+  const count = await ScheduledClass.countDocuments(query);
+
+  if (count >= maxClasses) {
+    return {
+      valid: false,
+      error: `Instructor ${instructorId} has reached daily limit of ${maxClasses} classes`
+    };
+  }
+
+  return { valid: true, currentCount: count, maxClasses };
+};
+
+/**
+ * Check student daily class limit
+ * @param {string} studentId - Student ID
+ * @param {Date} date - Date to check
+ * @param {number} maxClasses - Maximum allowed classes
+ * @param {string} excludeRegistrationId - Registration ID to exclude (for updates)
+ * @returns {Promise<Object>} - Validation result
+ */
+export const checkStudentDailyLimit = async (studentId, date, maxClasses, excludeRegistrationId = null) => {
+  const { dayStart, dayEnd } = getDayBoundaries(date);
+
+  const query = {
+    studentIds: studentId,
+    'schedule.date': { $gte: dayStart, $lte: dayEnd },
+    status: 'scheduled'
+  };
+
+  if (excludeRegistrationId) {
+    query.registrationId = { $ne: excludeRegistrationId };
+  }
+
+  const count = await ScheduledClass.countDocuments(query);
+
+  if (count >= maxClasses) {
+    return {
+      valid: false,
+      error: `Student ${studentId} has reached daily limit of ${maxClasses} classes`
+    };
+  }
+
+  return { valid: true, currentCount: count, maxClasses };
+};
+
+/**
+ * Check class type daily limit
+ * @param {string} classTypeId - Class type ID
+ * @param {Date} date - Date to check
+ * @param {number} maxClasses - Maximum allowed classes
+ * @param {string} excludeRegistrationId - Registration ID to exclude (for updates)
+ * @returns {Promise<Object>} - Validation result
+ */
+export const checkClassTypeDailyLimit = async (classTypeId, date, maxClasses, excludeRegistrationId = null) => {
+  const { dayStart, dayEnd } = getDayBoundaries(date);
+
+  const query = {
+    classTypeId,
+    'schedule.date': { $gte: dayStart, $lte: dayEnd },
+    status: 'scheduled'
+  };
+
+  if (excludeRegistrationId) {
+    query.registrationId = { $ne: excludeRegistrationId };
+  }
+
+  const count = await ScheduledClass.countDocuments(query);
+
+  if (count >= maxClasses) {
+    return {
+      valid: false,
+      error: `Class type ${classTypeId} has reached daily limit of ${maxClasses} classes`
+    };
+  }
+
+  return { valid: true, currentCount: count, maxClasses };
+};
+
+/**
+ * Comprehensive validation for scheduling a class
+ * @param {Object} classData - Class data to validate
+ * @param {string} excludeRegistrationId - Registration ID to exclude (for updates)
+ * @returns {Promise<Object>} - Validation result
+ */
+export const validateScheduledClass = async (classData, excludeRegistrationId = null) => {
+  const { instructorId, studentId, classTypeId, startTime, endTime, date } = classData;
+
+  // Load configuration
+  const config = await getConfigurationCache();
+
+  const errors = [];
+
+  // 1. Validate instructor exists
+  const instructorValidation = await validateInstructorExists(instructorId);
+  if (!instructorValidation.valid) {
+    errors.push(instructorValidation.error);
+  }
+
+  // 2. Validate class type exists
+  const classTypeValidation = await validateClassTypeExists(classTypeId);
+  if (!classTypeValidation.valid) {
+    errors.push(classTypeValidation.error);
+  }
+
+  // 3. Validate or create student
+  const studentValidation = await validateOrCreateStudent(
+    studentId,
+    config.enable_student_auto_add
+  );
+  if (!studentValidation.valid) {
+    errors.push(studentValidation.error);
+  }
+
+  // If basic validations failed, return early
+  if (errors.length > 0) {
+    return {
+      valid: false,
+      errors,
+      error: errors[0]
+    };
+  }
+
+  // 4. Check schedule conflicts
+  const conflictCheck = await checkScheduleConflicts(
+    { instructorId, studentId, startTime, endTime, date },
+    excludeRegistrationId
+  );
+  if (!conflictCheck.valid) {
+    errors.push(conflictCheck.error);
+  }
+
+  // 5. Check instructor daily limit
+  const instructorLimitCheck = await checkInstructorDailyLimit(
+    instructorId,
+    date || startTime,
+    config.instructor_max_classes_per_day,
+    excludeRegistrationId
+  );
+  if (!instructorLimitCheck.valid) {
+    errors.push(instructorLimitCheck.error);
+  }
+
+  // 6. Check student daily limit
+  const studentLimitCheck = await checkStudentDailyLimit(
+    studentId,
+    date || startTime,
+    config.student_max_classes_per_day,
+    excludeRegistrationId
+  );
+  if (!studentLimitCheck.valid) {
+    errors.push(studentLimitCheck.error);
+  }
+
+  // 7. Check class type daily limit
+  const classTypeLimitCheck = await checkClassTypeDailyLimit(
+    classTypeId,
+    date || startTime,
+    config.max_classes_per_type_per_day,
+    excludeRegistrationId
+  );
+  if (!classTypeLimitCheck.valid) {
+    errors.push(classTypeLimitCheck.error);
+  }
+
+  // Return result
+  if (errors.length > 0) {
+    return {
+      valid: false,
+      errors,
+      error: errors[0]
+    };
+  }
+
+  return {
+    valid: true,
+    studentAutoAdded: studentValidation.autoAdded
+  };
+};
