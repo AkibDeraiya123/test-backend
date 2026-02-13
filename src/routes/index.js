@@ -9,7 +9,6 @@ const router = express.Router();
 // Mount routes
 router.use('/masters', masterRoutes);
 router.use('/config', configRoutes);
-// router.use('/classes', classRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/reports', reportRoutes);
 

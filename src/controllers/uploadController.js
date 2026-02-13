@@ -107,33 +107,3 @@ export const getUploadStatus = async (req, res, next) => {
   }
 };
 
-/**
- * Get upload history
- */
-export const getUploadHistory = async (req, res, next) => {
-  try {
-    const { page = 1, limit = 20 } = req.query;
-
-    // Convert Map to array and sort by date
-    const allUploads = Array.from(uploadStatus.values())
-      .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
-
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + parseInt(limit);
-
-    const uploads = allUploads.slice(startIndex, endIndex);
-    const total = allUploads.length;
-
-    res.json({
-      success: true,
-      data: uploads,
-      pagination: {
-        total,
-        page: parseInt(page),
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
