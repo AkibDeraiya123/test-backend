@@ -29,6 +29,10 @@ const classTypeSchema = new mongoose.Schema({
     updatedAt: {
       type: Date,
       default: Date.now
+    },
+    autoAdded: {
+      type: Boolean,
+      default: false
     }
   }
 });

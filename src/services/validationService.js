@@ -13,7 +13,7 @@ const LAST_NAMES = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 
  * Generate random student name and email
  * @returns {{ name: string, email: string }}
  */
-export const generateRandomStudentNameAndEmail = () => {
+export const generateRandomNameAndEmail = () => {
   const first = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
   const last = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
   const name = `${first} ${last}`;
@@ -24,12 +24,27 @@ export const generateRandomStudentNameAndEmail = () => {
 };
 
 /**
- * Check if instructor exists and is active
+ * Check if instructor exists and is active, or auto-add if enabled
  * @param {string} instructorId - Instructor ID to validate
+ * @param {boolean} autoAdd - Whether to auto-add if not found
  * @returns {Promise<Object>} - Validation result
  */
-export const validateInstructorExists = async (instructorId) => {
-  const instructor = await Instructor.findOne({ instructorId, active: true });
+export const validateOrCreateInstructor = async (instructorId, autoAdd = false) => {
+  let instructor = await Instructor.findOne({ instructorId, active: true });
+
+  if (!instructor && autoAdd) {
+    const { name, email } = generateRandomNameAndEmail();
+    instructor = await Instructor.create({
+      instructorId,
+      name,
+      email,
+      active: true,
+      metadata: {
+        autoAdded: true
+      }
+    });
+    return { valid: true, instructor, autoAdded: true };
+  }
 
   if (!instructor) {
     return {
@@ -38,16 +53,30 @@ export const validateInstructorExists = async (instructorId) => {
     };
   }
 
-  return { valid: true, instructor };
+  return { valid: true, instructor, autoAdded: false };
 };
 
 /**
- * Check if class type exists and is active
+ * Check if class type exists and is active, or auto-add if enabled
  * @param {string} classTypeId - Class type ID to validate
+ * @param {boolean} autoAdd - Whether to auto-add if not found
  * @returns {Promise<Object>} - Validation result
  */
-export const validateClassTypeExists = async (classTypeId) => {
-  const classType = await ClassType.findOne({ classTypeId, active: true });
+export const validateOrCreateClassType = async (classTypeId, autoAdd = false) => {
+  let classType = await ClassType.findOne({ classTypeId, active: true });
+
+  if (!classType && autoAdd) {
+    classType = await ClassType.create({
+      classTypeId,
+      name: `Class Type ${classTypeId}`,
+      description: 'Auto-added from registration',
+      active: true,
+      metadata: {
+        autoAdded: true
+      }
+    });
+    return { valid: true, classType, autoAdded: true };
+  }
 
   if (!classType) {
     return {
@@ -56,7 +85,7 @@ export const validateClassTypeExists = async (classTypeId) => {
     };
   }
 
-  return { valid: true, classType };
+  return { valid: true, classType, autoAdded: false };
 };
 
 /**
@@ -70,7 +99,7 @@ export const validateOrCreateStudent = async (studentId, autoAdd = false) => {
 
   if (!student && autoAdd) {
     // Auto-add student
-    const { name, email } = generateRandomStudentNameAndEmail();
+    const { name, email } = generateRandomNameAndEmail();
     student = await Student.create({
       studentId,
       name,
@@ -272,14 +301,20 @@ export const validateScheduledClass = async (classData, excludeRegistrationId = 
 
   const errors = [];
 
-  // 1. Validate instructor exists
-  const instructorValidation = await validateInstructorExists(instructorId);
+  // 1. Validate or create instructor
+  const instructorValidation = await validateOrCreateInstructor(
+    instructorId,
+    config.enable_instructor_auto_add
+  );
   if (!instructorValidation.valid) {
     errors.push(instructorValidation.error);
   }
 
-  // 2. Validate class type exists
-  const classTypeValidation = await validateClassTypeExists(classTypeId);
+  // 2. Validate or create class type
+  const classTypeValidation = await validateOrCreateClassType(
+    classTypeId,
+    config.enable_class_type_auto_add
+  );
   if (!classTypeValidation.valid) {
     errors.push(classTypeValidation.error);
   }
@@ -355,6 +390,8 @@ export const validateScheduledClass = async (classData, excludeRegistrationId = 
 
   return {
     valid: true,
-    studentAutoAdded: studentValidation.autoAdded
+    studentAutoAdded: studentValidation.autoAdded,
+    instructorAutoAdded: instructorValidation.autoAdded,
+    classTypeAutoAdded: classTypeValidation.autoAdded
   };
 };

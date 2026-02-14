@@ -86,6 +86,20 @@ export const configurationSeedData = [
         dataType: 'boolean',
         description: 'Automatically add new student IDs found in CSV uploads',
         category: 'features'
+    },
+    {
+        key: 'enable_instructor_auto_add',
+        value: true,
+        dataType: 'boolean',
+        description: 'Automatically add new instructor IDs found in CSV uploads',
+        category: 'features'
+    },
+    {
+        key: 'enable_class_type_auto_add',
+        value: true,
+        dataType: 'boolean',
+        description: 'Automatically add new class type IDs found in CSV uploads',
+        category: 'features'
     }
 ];
 export const instructorSeedData = [

@@ -98,9 +98,13 @@ export const getUploadStatus = async (req, res, next) => {
       });
     }
 
+    // Return a deep copy so concurrent requests get a stable snapshot and
+    // we never expose the live Map value (avoids partial results if the
+    // completed write is still in progress)
+    const snapshot = JSON.parse(JSON.stringify(status));
     res.json({
       success: true,
-      data: status
+      data: snapshot
     });
   } catch (error) {
     next(error);
