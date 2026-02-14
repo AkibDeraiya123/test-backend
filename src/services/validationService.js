@@ -5,6 +5,24 @@ import ClassType from '../models/ClassType.js';
 import { hasTimeOverlap, getDayBoundaries } from '../utils/timeOverlap.js';
 import { getConfigurationCache } from '../controllers/configController.js';
 
+
+const FIRST_NAMES = ['Alex', 'Jordan', 'Sam', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Avery', 'Quinn', 'Jamie', 'Dakota', 'Skyler', 'Cameron', 'Reese', 'Parker'];
+const LAST_NAMES = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez', 'Wilson', 'Anderson', 'Thomas', 'Taylor', 'Moore'];
+
+/**
+ * Generate random student name and email
+ * @returns {{ name: string, email: string }}
+ */
+export const generateRandomStudentNameAndEmail = () => {
+  const first = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
+  const last = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+  const name = `${first} ${last}`;
+  const local = `${first.toLowerCase()}.${last.toLowerCase()}`.replace(/\s+/g, '');
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const email = `${local}+${suffix}@example.com`;
+  return { name, email };
+};
+
 /**
  * Check if instructor exists and is active
  * @param {string} instructorId - Instructor ID to validate
@@ -52,10 +70,11 @@ export const validateOrCreateStudent = async (studentId, autoAdd = false) => {
 
   if (!student && autoAdd) {
     // Auto-add student
+    const { name, email } = generateRandomStudentNameAndEmail();
     student = await Student.create({
       studentId,
-      name: '',
-      email: '',
+      name,
+      email,
       active: true,
       metadata: {
         autoAdded: true
