@@ -1,2 +1,5 @@
 Registration ID,Student ID,Instructor ID,Class ID,Class Start Time,Action
-null,1,1,2,02/16/2026 15:00,new
+REG_E171A33F,2,2,3,03/12/2026 17:20,update
+REG_D6A44A98,2,2,3,03/12/2026 17:20,delete
+null,2,2,3,02/17/2026 17:20,new
+null,2,2,3,02/18/2026 17:20,new
